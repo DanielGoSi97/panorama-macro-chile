@@ -1,0 +1,22 @@
+# Credenciales — NUNCA subir
+.env
+*.pem
+
+# Datos descargados / artefactos
+datos/
+*.csv
+
+# Entornos y cachés de Python
+.venv/
+venv/
+__pycache__/
+*.pyc
+
+# Scripts/IaC obsoletos de planes anteriores (App Runner / modo CSV)
+apprunner.yaml
+deploy_aws.ps1
+actualizar_datos_ec2.ps1
+
+# Sistema
+.DS_Store
+Thumbs.db
