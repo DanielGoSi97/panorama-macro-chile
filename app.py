@@ -229,6 +229,10 @@ def panel_serie(codigo: str, nombre: str, unidad: str, meses_proy: int, key: str
 
 
 # --------------------------- Cabecera ---------------------------
+st.markdown(
+    f'<a href="/" target="_self" style="color:{PRIMARIO};font-weight:600;'
+    f'font-size:0.85rem;text-decoration:none;">← Volver al portafolio</a>',
+    unsafe_allow_html=True)
 cab = st.columns([5, 1])
 if cab[1].button("🔄 Actualizar", key="refresh", width="stretch"):
     st.cache_data.clear()
