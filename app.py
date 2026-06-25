@@ -87,7 +87,10 @@ st.markdown(f"""
     html, body, .stApp, [class*="st-"] {{ font-family:'Inter', -apple-system, 'Segoe UI', sans-serif; }}
     span[data-testid="stIconMaterial"] {{ font-family:'Material Symbols Rounded' !important; }}
     .stApp {{ background-color:{FONDO}; }}
-    .block-container {{ padding-top:1.2rem; padding-bottom:2rem; max-width:1280px; }}
+    /* Ocultar el header/toolbar por defecto de Streamlit (la barra blanca superior) */
+    header[data-testid="stHeader"] {{ display:none; }}
+    div[data-testid="stToolbar"] {{ display:none; }}
+    .block-container {{ padding-top:2rem; padding-bottom:2rem; max-width:1280px; }}
     h1,h2,h3,h4 {{ color:{TXT}; font-weight:700; letter-spacing:-0.3px; }}
     .hero {{ background:linear-gradient(120deg, #0B3B36 0%, {PRIM_OSC} 55%, {PRIMARIO} 100%);
         border-radius:18px; padding:26px 32px 22px 32px; margin-bottom:18px;
