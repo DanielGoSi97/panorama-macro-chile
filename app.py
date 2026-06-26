@@ -1,17 +1,10 @@
 # -*- coding: utf-8 -*-
 """
 Dashboard macro de Chile — datos en vivo desde la API del Banco Central (BDE).
+Bilingüe (ES/EN): lee ?lang de la URL y tiene su propio selector de idioma.
 
-Fuente: API Base de Datos Estadísticos (BDE) del Banco Central de Chile
-(si3.bcentral.cl / SieteRestWS). Credenciales en dashboard/.env (BCCH_USER,
-BCCH_PASS). Datos en vivo con caché.
-
-Secciones: KPIs destacados, pestañas temáticas con series curadas (cada una con
-proyección de tendencia) y un Explorador que busca entre las ~20.000 series del
-catálogo del BCCh.
-
-Diseño alineado al dashboard de Licitaciones (Inter, paleta teal, hero, KPIs en
-tarjetas, gráficos Altair).
+Fuente: API Base de Datos Estadísticos (BDE) del Banco Central de Chile.
+Credenciales en dashboard/.env (BCCH_USER, BCCH_PASS).
 """
 from __future__ import annotations
 
@@ -26,60 +19,119 @@ import streamlit as st
 
 import bcentral
 
-# ---------------- Paleta (teal moderno + neutros slate) ----------------
-PRIMARIO = "#0F766E"
-PRIM_OSC = "#115E59"
-PRIM_TINTE = "#CCFBF1"
-CIAN = "#0E7490"
-FONDO = "#F5F7F7"
-CARD = "#FFFFFF"
-BORDE = "#E2E8F0"
-TXT = "#0F172A"
-TXT_MED = "#64748B"
-TXT_SUAVE = "#94A3B8"
-ROJO = "#DC2626"
+# ---------------- Paleta ----------------
+PRIMARIO = "#0F766E"; PRIM_OSC = "#115E59"; PRIM_TINTE = "#CCFBF1"; CIAN = "#0E7490"
+FONDO = "#F5F7F7"; CARD = "#FFFFFF"; BORDE = "#E2E8F0"; TXT = "#0F172A"
+TXT_MED = "#64748B"; TXT_SUAVE = "#94A3B8"; ROJO = "#DC2626"
 
-TTL_CACHE = 60 * 60 * 6   # 6 horas
-ANIOS = 8                 # histórico a traer por serie
+TTL_CACHE = 60 * 60 * 6
+ANIOS = 8
 
-# ---- Series curadas (códigos verificados del BCCh) por área temática ----
-# (codigo, nombre legible, unidad: "$" | "%" | "idx")
-CURADO: dict[str, list[tuple[str, str, str]]] = {
-    "Tipo de cambio": [
-        ("F073.TCO.PRE.Z.D", "Dólar observado", "$"),
-        ("F072.CLP.EUR.N.O.D", "Euro", "$"),
-    ],
-    "Unidades reajustables": [
-        ("F073.UFF.PRE.Z.D", "Unidad de Fomento (UF)", "$"),
-        ("F073.UTR.PRE.Z.M", "Unidad Tributaria Mensual (UTM)", "$"),
-    ],
-    "Precios": [
-        ("F074.IPC.VAR.Z.Z.C.M", "IPC · variación mensual", "%"),
-        ("G073.IPC.V12.2023.M", "IPC · variación anual", "%"),
-    ],
-    "Actividad": [
-        ("F032.IMC.IND.Z.Z.EP18.Z.Z.0.M", "IMACEC · índice", "idx"),
-    ],
-    "Política monetaria": [
-        ("F022.TPM.TIN.D001.NO.Z.D", "Tasa de Política Monetaria (TPM)", "%"),
-    ],
-    "Empleo": [
-        ("F049.DES.TAS.INE9.10.M", "Tasa de desempleo", "%"),
-    ],
-}
-
-# KPIs de la fila superior: (codigo, etiqueta corta, unidad)
-DESTACADOS = [
-    ("F073.TCO.PRE.Z.D", "Dólar", "$"),
-    ("F073.UFF.PRE.Z.D", "UF", "$"),
-    ("F073.UTR.PRE.Z.M", "UTM", "$"),
-    ("F074.IPC.VAR.Z.Z.C.M", "IPC mensual", "%"),
-    ("F022.TPM.TIN.D001.NO.Z.D", "TPM", "%"),
-    ("F049.DES.TAS.INE9.10.M", "Desempleo", "%"),
+# ---- Series curadas por área. (key, {es,en} título), [(codigo, {es,en}, unidad)] ----
+AREAS = [
+    ("fx", {"es": "Tipo de cambio", "en": "Exchange rate"}, [
+        ("F073.TCO.PRE.Z.D", {"es": "Dólar observado", "en": "Observed US dollar"}, "$"),
+        ("F072.CLP.EUR.N.O.D", {"es": "Euro", "en": "Euro"}, "$"),
+    ]),
+    ("unidades", {"es": "Unidades reajustables", "en": "Indexation units"}, [
+        ("F073.UFF.PRE.Z.D", {"es": "Unidad de Fomento (UF)", "en": "Unidad de Fomento (UF)"}, "$"),
+        ("F073.UTR.PRE.Z.M", {"es": "Unidad Tributaria Mensual (UTM)", "en": "Monthly Tax Unit (UTM)"}, "$"),
+    ]),
+    ("precios", {"es": "Precios", "en": "Prices"}, [
+        ("F074.IPC.VAR.Z.Z.C.M", {"es": "IPC · variación mensual", "en": "CPI · monthly change"}, "%"),
+        ("G073.IPC.V12.2023.M", {"es": "IPC · variación anual", "en": "CPI · annual change"}, "%"),
+    ]),
+    ("actividad", {"es": "Actividad", "en": "Activity"}, [
+        ("F032.IMC.IND.Z.Z.EP18.Z.Z.0.M", {"es": "IMACEC · índice", "en": "IMACEC · index"}, "idx"),
+    ]),
+    ("monetaria", {"es": "Política monetaria", "en": "Monetary policy"}, [
+        ("F022.TPM.TIN.D001.NO.Z.D", {"es": "Tasa de Política Monetaria (TPM)", "en": "Monetary Policy Rate (MPR)"}, "%"),
+    ]),
+    ("empleo", {"es": "Empleo", "en": "Employment"}, [
+        ("F049.DES.TAS.INE9.10.M", {"es": "Tasa de desempleo", "en": "Unemployment rate"}, "%"),
+    ]),
 ]
 
+DESTACADOS = [
+    ("F073.TCO.PRE.Z.D", {"es": "Dólar", "en": "USD"}, "$"),
+    ("F073.UFF.PRE.Z.D", {"es": "UF", "en": "UF"}, "$"),
+    ("F073.UTR.PRE.Z.M", {"es": "UTM", "en": "UTM"}, "$"),
+    ("F074.IPC.VAR.Z.Z.C.M", {"es": "IPC mensual", "en": "CPI monthly"}, "%"),
+    ("F022.TPM.TIN.D001.NO.Z.D", {"es": "TPM", "en": "MPR"}, "%"),
+    ("F049.DES.TAS.INE9.10.M", {"es": "Desempleo", "en": "Unemployment"}, "%"),
+]
+
+# ---------------- Traducciones de interfaz ----------------
+T = {
+    "es": {
+        "volver": "← Volver al portafolio", "actualizar": "🔄 Actualizar",
+        "hero_t": "Panorama Macroeconómico de Chile",
+        "hero_s": "Indicadores en vivo desde la API del Banco Central de Chile (BDE)",
+        "b_cargando": "⏱ Cargando…", "b_ultimo": "⏱ Último dato:",
+        "b_envivo": "🔴 Datos en vivo (caché 6 h)",
+        "b_fuente": "🏦 Fuente: BCCh · Base de Datos Estadísticos",
+        "spinner": "Cargando indicadores desde el Banco Central…",
+        "explorador": "🔎 Explorador de series",
+        "meses": "Meses de proyección",
+        "ultimo_valor": "Último valor", "min": "Mínimo período", "max": "Máximo período",
+        "prom": "Promedio período", "al": "Al", "ultimo_dato": "Último dato:",
+        "sin_datos": "Sin datos para", "fecha": "Fecha", "proyeccion": "Proyección",
+        "indice": "Índice",
+        "exp_titulo": "Explorador del catálogo del Banco Central",
+        "exp_sub": "Busca entre las ~20.000 series de la Base de Datos Estadísticos. "
+                   "Escribe palabras clave (ej. «exportaciones cobre», «tasa interés», «PIB minería»).",
+        "exp_buscar": "Buscar serie", "exp_ph": "palabras clave…", "exp_freq": "Frecuencia",
+        "exp_coinc": "coincidencias", "exp_result": "Resultados (máx. 300)",
+        "exp_sindata": "Esa serie no devolvió datos.", "exp_min": "Mínimo", "exp_max": "Máximo",
+        "exp_obs": "Observaciones", "descargar": "⬇ Descargar CSV",
+        "exp_min3": "Escribe al menos 3 caracteres para buscar.",
+        "exp_nocat": "No se pudo cargar el catálogo de series.",
+        "exp_cargacat": "Cargando catálogo de series del BCCh…",
+        "footer": "Proyecciones por regresión lineal de tendencia; referenciales, no constituyen "
+                  "asesoría de inversión. Fuente: API BDE, Banco Central de Chile.",
+    },
+    "en": {
+        "volver": "← Back to portfolio", "actualizar": "🔄 Refresh",
+        "hero_t": "Chilean Macroeconomic Overview",
+        "hero_s": "Live indicators from the Central Bank of Chile API (BDE)",
+        "b_cargando": "⏱ Loading…", "b_ultimo": "⏱ Latest data:",
+        "b_envivo": "🔴 Live data (6h cache)",
+        "b_fuente": "🏦 Source: Central Bank · Statistics Database",
+        "spinner": "Loading indicators from the Central Bank…",
+        "explorador": "🔎 Series explorer",
+        "meses": "Projection months",
+        "ultimo_valor": "Latest value", "min": "Period minimum", "max": "Period maximum",
+        "prom": "Period average", "al": "As of", "ultimo_dato": "Latest data:",
+        "sin_datos": "No data for", "fecha": "Date", "proyeccion": "Projection",
+        "indice": "Index",
+        "exp_titulo": "Central Bank catalog explorer",
+        "exp_sub": "Search across the ~20,000 series of the Statistics Database. "
+                   "Type keywords (e.g. «copper exports», «interest rate», «mining GDP»).",
+        "exp_buscar": "Search series", "exp_ph": "keywords…", "exp_freq": "Frequency",
+        "exp_coinc": "matches", "exp_result": "Results (max 300)",
+        "exp_sindata": "That series returned no data.", "exp_min": "Minimum", "exp_max": "Maximum",
+        "exp_obs": "Observations", "descargar": "⬇ Download CSV",
+        "exp_min3": "Type at least 3 characters to search.",
+        "exp_nocat": "Could not load the series catalog.",
+        "exp_cargacat": "Loading the Central Bank series catalog…",
+        "footer": "Trend projections via linear regression; indicative only, not investment "
+                  "advice. Source: BDE API, Central Bank of Chile.",
+    },
+}
+
 st.set_page_config(page_title="Macro Chile · Banco Central", layout="wide",
-                   page_icon="📊", initial_sidebar_state="collapsed")
+                   page_icon="https://dgonzsim.cl/favicon.svg",
+                   initial_sidebar_state="collapsed")
+
+
+def _get_lang() -> str:
+    q = st.query_params.get("lang", "es")
+    return q if q in ("es", "en") else "es"
+
+
+LANG = _get_lang()
+def t(k: str) -> str: return T[LANG].get(k, k)
+
 
 st.markdown(f"""
 <style>
@@ -87,7 +139,6 @@ st.markdown(f"""
     html, body, .stApp, [class*="st-"] {{ font-family:'Inter', -apple-system, 'Segoe UI', sans-serif; }}
     span[data-testid="stIconMaterial"] {{ font-family:'Material Symbols Rounded' !important; }}
     .stApp {{ background-color:{FONDO}; }}
-    /* Ocultar el header/toolbar por defecto de Streamlit (la barra blanca superior) */
     header[data-testid="stHeader"] {{ display:none; }}
     div[data-testid="stToolbar"] {{ display:none; }}
     .block-container {{ padding-top:2rem; padding-bottom:2rem; max-width:1280px; }}
@@ -192,11 +243,11 @@ def grafico_serie(df: pd.DataFrame, nombre: str, unidad: str, meses_proy: int):
     capas = []
     base = alt.Chart(df).encode(
         x=alt.X("fecha:T", title=None, axis=alt.Axis(format="%b %y", **AXIS)),
-        y=alt.Y("valor:Q", title=unidad if unidad in ("$", "%", "US$") else "Índice",
+        y=alt.Y("valor:Q", title=unidad if unidad in ("$", "%", "US$") else t("indice"),
                 scale=alt.Scale(zero=False), axis=alt.Axis(**AXIS)))
     capas.append(base.mark_area(opacity=0.12, color=PRIMARIO))
     capas.append(base.mark_line(color=PRIMARIO, strokeWidth=2.2).encode(
-        tooltip=[alt.Tooltip("fecha:T", title="Fecha", format="%d-%m-%Y"),
+        tooltip=[alt.Tooltip("fecha:T", title=t("fecha"), format="%d-%m-%Y"),
                  alt.Tooltip("valor:Q", title=nombre, format=",.2f")]))
     if not proy.empty:
         puente = pd.concat([df.tail(1)[["fecha", "valor"]], proy], ignore_index=True)
@@ -204,7 +255,7 @@ def grafico_serie(df: pd.DataFrame, nombre: str, unidad: str, meses_proy: int):
             color=ROJO, strokeWidth=2.2, strokeDash=[6, 4]).encode(
             x="fecha:T", y="valor:Q",
             tooltip=[alt.Tooltip("fecha:T", format="%b %Y"),
-                     alt.Tooltip("valor:Q", title="Proyección", format=",.2f")]))
+                     alt.Tooltip("valor:Q", title=t("proyeccion"), format=",.2f")]))
     st.altair_chart(alt.layer(*capas).properties(height=340, background="transparent")
                     .configure_view(strokeWidth=0), width="stretch")
 
@@ -212,17 +263,17 @@ def grafico_serie(df: pd.DataFrame, nombre: str, unidad: str, meses_proy: int):
 def panel_serie(codigo: str, nombre: str, unidad: str, meses_proy: int, key: str):
     df = serie(codigo)
     if df.empty:
-        st.warning(f"Sin datos para «{nombre}» ({codigo}).")
+        st.warning(f"{t('sin_datos')} «{nombre}» ({codigo}).")
         return
     var = variacion_12m(df)
     k = st.columns(4)
-    k[0].metric("Último valor", fmt(df["valor"].iloc[-1], unidad),
+    k[0].metric(t("ultimo_valor"), fmt(df["valor"].iloc[-1], unidad),
                 delta=f"{var:+.1f}% 12m" if var is not None else None,
                 delta_color="normal" if unidad not in ("%", "idx") else "off",
-                help=f"Al {df['fecha'].max().date()}")
-    k[1].metric("Mínimo período", fmt(df["valor"].min(), unidad))
-    k[2].metric("Máximo período", fmt(df["valor"].max(), unidad))
-    k[3].metric("Promedio período", fmt(df["valor"].mean(), unidad))
+                help=f"{t('al')} {df['fecha'].max().date()}")
+    k[1].metric(t("min"), fmt(df["valor"].min(), unidad))
+    k[2].metric(t("max"), fmt(df["valor"].max(), unidad))
+    k[3].metric(t("prom"), fmt(df["valor"].mean(), unidad))
     with st.container(border=True, key=f"card_{key}"):
         st.markdown(f"##### {nombre}  ·  `{codigo}`")
         grafico_serie(df, nombre, unidad, meses_proy)
@@ -230,31 +281,36 @@ def panel_serie(codigo: str, nombre: str, unidad: str, meses_proy: int, key: str
 
 # --------------------------- Cabecera ---------------------------
 st.markdown(
-    f'<a href="/" target="_self" style="color:{PRIMARIO};font-weight:600;'
-    f'font-size:0.85rem;text-decoration:none;">← Volver al portafolio</a>',
+    f'<a href="/?lang={LANG}" target="_self" style="color:{PRIMARIO};font-weight:600;'
+    f'font-size:0.85rem;text-decoration:none;">{t("volver")}</a>',
     unsafe_allow_html=True)
-cab = st.columns([5, 1])
-if cab[1].button("🔄 Actualizar", key="refresh", width="stretch"):
+cab = st.columns([5, 1.1, 1.1])
+sel = cab[1].radio("idioma", ["ES", "EN"], index=0 if LANG == "es" else 1,
+                   horizontal=True, label_visibility="collapsed")
+if {"ES": "es", "EN": "en"}[sel] != LANG:
+    st.query_params["lang"] = {"ES": "es", "EN": "en"}[sel]
+    st.rerun()
+if cab[2].button(t("actualizar"), key="refresh", width="stretch"):
     st.cache_data.clear()
     st.rerun()
 
 hero = st.empty()
 hero.markdown(
-    '<div class="hero"><p class="hero-title">Panorama Macroeconómico de Chile</p>'
-    '<p class="hero-sub">Indicadores en vivo desde la API del Banco Central de Chile (BDE)</p>'
-    '<span class="hero-badge">⏱ Cargando…</span></div>', unsafe_allow_html=True)
+    f'<div class="hero"><p class="hero-title">{t("hero_t")}</p>'
+    f'<p class="hero-sub">{t("hero_s")}</p>'
+    f'<span class="hero-badge">{t("b_cargando")}</span></div>', unsafe_allow_html=True)
 
-with st.spinner("Cargando indicadores desde el Banco Central…"):
+with st.spinner(t("spinner")):
     dest_df = {cod: serie(cod) for cod, _, _ in DESTACADOS}
 fechas = [d["fecha"].max() for d in dest_df.values() if not d.empty]
 ult = max(fechas).date() if fechas else "—"
 
 hero.markdown(
-    '<div class="hero"><p class="hero-title">Panorama Macroeconómico de Chile</p>'
-    '<p class="hero-sub">Indicadores en vivo desde la API del Banco Central de Chile (BDE)</p>'
-    f'<span class="hero-badge">⏱ Último dato: {ult}</span>'
-    '<span class="hero-badge">🔴 Datos en vivo (caché 6 h)</span>'
-    '<span class="hero-badge">🏦 Fuente: BCCh · Base de Datos Estadísticos</span></div>',
+    f'<div class="hero"><p class="hero-title">{t("hero_t")}</p>'
+    f'<p class="hero-sub">{t("hero_s")}</p>'
+    f'<span class="hero-badge">{t("b_ultimo")} {ult}</span>'
+    f'<span class="hero-badge">{t("b_envivo")}</span>'
+    f'<span class="hero-badge">{t("b_fuente")}</span></div>',
     unsafe_allow_html=True)
 
 # KPIs destacados
@@ -262,78 +318,74 @@ cols = st.columns(len(DESTACADOS))
 for col, (cod, etiqueta, unidad) in zip(cols, DESTACADOS):
     df = dest_df[cod]
     if df.empty:
-        col.metric(etiqueta, "—")
+        col.metric(etiqueta[LANG], "—")
         continue
     var = variacion_12m(df)
-    col.metric(etiqueta, fmt(df["valor"].iloc[-1], unidad),
+    col.metric(etiqueta[LANG], fmt(df["valor"].iloc[-1], unidad),
                delta=f"{var:+.1f}% 12m" if var is not None else None,
                delta_color="normal" if unidad not in ("%", "idx") else "off",
-               help=f"Último dato: {df['fecha'].max().date()}")
+               help=f"{t('ultimo_dato')} {df['fecha'].max().date()}")
 
 st.write("")
 
 # --------------------------- Pestañas ---------------------------
-areas = list(CURADO.keys())
-tabs = st.tabs(areas + ["🔎 Explorador de series"])
+tab_labels = [a[1][LANG] for a in AREAS] + [t("explorador")]
+tabs = st.tabs(tab_labels)
 
-# Control de proyección compartido (en cada pestaña temática)
-for tab, area in zip(tabs[:-1], areas):
+for tab, (key, _lab, series_list) in zip(tabs[:-1], AREAS):
     with tab:
-        meses = st.slider("Meses de proyección", 0, 12, 6, key=f"proy_{area}")
-        for i, (cod, nombre, unidad) in enumerate(CURADO[area]):
-            panel_serie(cod, nombre, unidad, meses, key=f"{area}_{i}")
+        meses = st.slider(t("meses"), 0, 12, 6, key=f"proy_{key}")
+        for i, (cod, nombre, unidad) in enumerate(series_list):
+            panel_serie(cod, nombre[LANG], unidad, meses, key=f"{key}_{i}")
             st.write("")
 
 # --------------------------- Explorador ---------------------------
 with tabs[-1]:
-    st.markdown("##### Explorador del catálogo del Banco Central")
-    st.caption("Busca entre las ~20.000 series de la Base de Datos Estadísticos. "
-               "Escribe palabras clave (ej. «exportaciones cobre», «tasa interés», «PIB minería»).")
+    st.markdown(f"##### {t('exp_titulo')}")
+    st.caption(t("exp_sub"))
     c = st.columns([3, 1])
-    q = c[0].text_input("Buscar serie", placeholder="palabras clave…", key="exp_q")
-    freq_sel = c[1].multiselect("Frecuencia", ["DAILY", "MONTHLY", "QUARTERLY", "ANNUAL"],
+    q = c[0].text_input(t("exp_buscar"), placeholder=t("exp_ph"), key="exp_q")
+    freq_sel = c[1].multiselect(t("exp_freq"), ["DAILY", "MONTHLY", "QUARTERLY", "ANNUAL"],
                                 key="exp_freq")
     if q and len(q.strip()) >= 3:
-        # El catálogo solo se descarga al buscar (es grande); luego queda cacheado.
-        with st.spinner("Cargando catálogo de series del BCCh…"):
+        with st.spinner(t("exp_cargacat")):
             cat = catalogo()
         filt = cat
         if freq_sel:
             filt = filt[filt["frecuencia"].isin(freq_sel)]
         if cat.empty:
-            st.warning("No se pudo cargar el catálogo de series.")
+            st.warning(t("exp_nocat"))
         else:
             for palabra in q.lower().split():
                 filt = filt[filt["titulo"].str.lower().str.contains(palabra, na=False)]
-            st.caption(f"{len(filt):,} coincidencias".replace(",", "."))
+            st.caption(f"{len(filt):,} {t('exp_coinc')}".replace(",", "."))
             if not filt.empty:
                 opciones = filt.head(300)
                 etiqueta = {f"{r.titulo}  ·  [{r.codigo}]": r.codigo
                             for r in opciones.itertuples()}
-                elegido = st.selectbox("Resultados (máx. 300)", list(etiqueta), key="exp_sel")
+                elegido = st.selectbox(t("exp_result"), list(etiqueta), key="exp_sel")
                 cod = etiqueta[elegido]
-                meses = st.slider("Meses de proyección", 0, 12, 6, key="exp_proy")
+                meses = st.slider(t("meses"), 0, 12, 6, key="exp_proy")
                 df = serie(cod)
                 if df.empty:
-                    st.warning("Esa serie no devolvió datos.")
+                    st.warning(t("exp_sindata"))
                 else:
                     var = variacion_12m(df)
                     k = st.columns(4)
-                    k[0].metric("Último valor", fmt(df["valor"].iloc[-1], ""),
+                    k[0].metric(t("ultimo_valor"), fmt(df["valor"].iloc[-1], ""),
                                 delta=f"{var:+.1f}% 12m" if var is not None else None,
-                                delta_color="off", help=f"Al {df['fecha'].max().date()}")
-                    k[1].metric("Mínimo", fmt(df["valor"].min(), ""))
-                    k[2].metric("Máximo", fmt(df["valor"].max(), ""))
-                    k[3].metric("Observaciones", f"{len(df):,}".replace(",", "."))
+                                delta_color="off", help=f"{t('al')} {df['fecha'].max().date()}")
+                    k[1].metric(t("exp_min"), fmt(df["valor"].min(), ""))
+                    k[2].metric(t("exp_max"), fmt(df["valor"].max(), ""))
+                    k[3].metric(t("exp_obs"), f"{len(df):,}".replace(",", "."))
                     with st.container(border=True, key="card_exp"):
                         st.markdown(f"##### {elegido}")
                         grafico_serie(df, "valor", "", meses)
                     tabla = df.copy(); tabla["fecha"] = tabla["fecha"].dt.date
-                    st.download_button("⬇ Descargar CSV",
+                    st.download_button(t("descargar"),
                                        tabla.to_csv(index=False).encode("utf-8-sig"),
                                        file_name=f"{cod}.csv", mime="text/csv")
     else:
-        st.info("Escribe al menos 3 caracteres para buscar.")
+        st.info(t("exp_min3"))
 
-st.caption("Proyecciones por regresión lineal de tendencia; referenciales, no constituyen "
-           "asesoría de inversión. Fuente: API BDE, Banco Central de Chile.")
+st.caption(t("footer"))
