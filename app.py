@@ -188,8 +188,19 @@ _cargar_env()
 
 
 # --------------------------- Datos (cacheados) ---------------------------
+# Caché en disco que refresca un cron (refrescar_cache.py) cada 6 h. Leer del
+# disco es instantáneo y evita esperar la API del BCCh en cada carga (~19 s).
+CACHE_DIR = Path(__file__).resolve().parent / "cache"
+
+
 @st.cache_data(ttl=TTL_CACHE, show_spinner=False)
 def serie(codigo: str) -> pd.DataFrame:
+    f = CACHE_DIR / f"{codigo}.pkl"
+    if f.exists():
+        try:
+            return pd.read_pickle(f)
+        except Exception:  # noqa: BLE001
+            pass
     try:
         return bcentral.get_series(codigo, anios_atras=ANIOS)
     except Exception:  # noqa: BLE001

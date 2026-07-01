@@ -20,3 +20,6 @@ actualizar_datos_ec2.ps1
 # Sistema
 .DS_Store
 Thumbs.db
+
+# Caché de datos pre-descargados (lo genera el cron en el server)
+cache/
