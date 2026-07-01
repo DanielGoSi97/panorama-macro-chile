@@ -72,7 +72,7 @@ T = {
         "b_fuente": "🏦 Fuente: BCCh · Base de Datos Estadísticos",
         "spinner": "Cargando indicadores desde el Banco Central…",
         "explorador": "🔎 Explorador de series",
-        "meses": "Meses de proyección",
+        "meses": "Proyección de tendencia", "sin_proy": "Sin proyección", "meses_u": "meses",
         "ultimo_valor": "Último valor", "min": "Mínimo período", "max": "Máximo período",
         "prom": "Promedio período", "al": "Al", "ultimo_dato": "Último dato:",
         "sin_datos": "Sin datos para", "fecha": "Fecha", "proyeccion": "Proyección",
@@ -99,7 +99,7 @@ T = {
         "b_fuente": "🏦 Source: Central Bank · Statistics Database",
         "spinner": "Loading indicators from the Central Bank…",
         "explorador": "🔎 Series explorer",
-        "meses": "Projection months",
+        "meses": "Trend projection", "sin_proy": "No projection", "meses_u": "months",
         "ultimo_valor": "Latest value", "min": "Period minimum", "max": "Period maximum",
         "prom": "Period average", "al": "As of", "ultimo_dato": "Latest data:",
         "sin_datos": "No data for", "fecha": "Date", "proyeccion": "Projection",
@@ -155,12 +155,24 @@ st.markdown(f"""
         border-radius:16px !important; padding:14px 20px !important;
         box-shadow:0 1px 2px rgba(15,23,42,0.04), 0 4px 12px rgba(15,23,42,0.04) !important; }}
     div[data-testid="stMetric"] {{ background:{CARD}; border:1px solid {BORDE}; border-radius:16px;
-        padding:16px 20px; min-height:112px;
+        padding:14px 16px; min-height:104px; overflow:hidden;
         box-shadow:0 1px 2px rgba(15,23,42,0.04), 0 4px 12px rgba(15,23,42,0.04); }}
+    /* Valor: escala con el ancho para no desbordar en pantallas chicas */
     div[data-testid="stMetricValue"], div[data-testid="stMetricValue"] > div {{
-        color:{TXT}; font-weight:800; letter-spacing:-0.5px; font-size:1.45rem !important; }}
-    div[data-testid="stMetricLabel"] p {{ color:{TXT_MED} !important; font-size:0.72rem !important;
-        font-weight:600 !important; text-transform:uppercase; letter-spacing:0.6px; }}
+        color:{TXT}; font-weight:800; letter-spacing:-0.5px;
+        font-size:clamp(0.95rem, 1.15vw + 0.55rem, 1.4rem) !important;
+        white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }}
+    /* Etiqueta (nombre indicador): permite 2 líneas sin cortar */
+    div[data-testid="stMetricLabel"] {{ white-space:normal !important; overflow:visible !important; }}
+    div[data-testid="stMetricLabel"] p {{ color:{TXT_MED} !important; font-size:0.7rem !important;
+        font-weight:600 !important; text-transform:uppercase; letter-spacing:0.4px;
+        white-space:normal !important; overflow:visible !important; line-height:1.25; }}
+    div[data-testid="stMetricLabel"] > div {{ overflow:visible !important; white-space:normal !important; }}
+    /* En pantallas medianas/chicas, más compacto */
+    @media (max-width:1100px) {{
+        div[data-testid="stMetric"] {{ padding:12px 12px; min-height:96px; }}
+        div[data-testid="stMetricValue"] > div {{ font-size:clamp(0.9rem, 2.2vw, 1.2rem) !important; }}
+    }}
     button[data-baseweb="tab"] {{ font-weight:600; color:{TXT_MED}; }}
     button[data-baseweb="tab"][aria-selected="true"] {{ color:{PRIMARIO}; }}
     div[data-baseweb="tab-highlight"] {{ background-color:{PRIMARIO} !important; height:3px; border-radius:3px; }}
@@ -247,6 +259,15 @@ def fmt(v, unidad: str) -> str:
 
 
 AXIS = dict(labelColor=TXT_MED, titleColor=TXT_MED, gridColor="#EEF2F6")
+
+
+def selector_meses(key: str) -> int:
+    """Control elegante (segmented) para elegir el horizonte de proyección."""
+    def _lbl(v):
+        return t("sin_proy") if v == 0 else f"{v} {t('meses_u')}"
+    sel = st.segmented_control(t("meses"), [0, 3, 6, 12], default=6,
+                               format_func=_lbl, key=key)
+    return sel if sel is not None else 0
 
 
 def grafico_serie(df: pd.DataFrame, nombre: str, unidad: str, meses_proy: int):
@@ -345,7 +366,7 @@ tabs = st.tabs(tab_labels)
 
 for tab, (key, _lab, series_list) in zip(tabs[:-1], AREAS):
     with tab:
-        meses = st.slider(t("meses"), 0, 12, 6, key=f"proy_{key}")
+        meses = selector_meses(f"proy_{key}")
         for i, (cod, nombre, unidad) in enumerate(series_list):
             panel_serie(cod, nombre[LANG], unidad, meses, key=f"{key}_{i}")
             st.write("")
@@ -376,7 +397,7 @@ with tabs[-1]:
                             for r in opciones.itertuples()}
                 elegido = st.selectbox(t("exp_result"), list(etiqueta), key="exp_sel")
                 cod = etiqueta[elegido]
-                meses = st.slider(t("meses"), 0, 12, 6, key="exp_proy")
+                meses = selector_meses("exp_proy")
                 df = serie(cod)
                 if df.empty:
                     st.warning(t("exp_sindata"))
