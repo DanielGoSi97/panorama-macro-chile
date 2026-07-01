@@ -316,14 +316,11 @@ st.markdown(
     f'<a href="/?lang={LANG}" target="_self" style="color:{PRIMARIO};font-weight:600;'
     f'font-size:0.85rem;text-decoration:none;">{t("volver")}</a>',
     unsafe_allow_html=True)
-cab = st.columns([5, 1.1, 1.1])
+cab = st.columns([6, 1])
 sel = cab[1].radio("idioma", ["ES", "EN"], index=0 if LANG == "es" else 1,
                    horizontal=True, label_visibility="collapsed")
 if {"ES": "es", "EN": "en"}[sel] != LANG:
     st.query_params["lang"] = {"ES": "es", "EN": "en"}[sel]
-    st.rerun()
-if cab[2].button(t("actualizar"), key="refresh", width="stretch"):
-    st.cache_data.clear()
     st.rerun()
 
 hero = st.empty()
